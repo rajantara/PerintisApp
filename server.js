@@ -25,5 +25,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/', require('./routes/index'));
 
 
-const PORT = process.env.PORT || '1010';
-app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
+const PORT = process.env.PORT || '7070';
+const server = require('http').createServer();
+
+server.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
