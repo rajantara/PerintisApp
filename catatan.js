@@ -1,36 +1,267 @@
 const express = require('express');
-const connectDB = require('./config/db');
-const cookieParser = require('cookie-parser');
-const methodOverride = require('method-override');
-const path = require('path');
+const router = express.Router();
+const bcrypt = require('bcryptjs');
+const auth = require('../middlewares/auth');
 
-const app = express();
+const User = require('../models/user');
 
-connectDB();
+//@route GET akun-user
+//@desc Show Akun User page
+//@access Private
 
-app.set('view engine', 'ejs');
+router.get('/', auth, async (req, res) => {
+  try {
+    const users = await User.find()
+      .select('username role')
+      .sort({ date: 'desc' });
 
-//Middleware
-app.use(express.urlencoded({ extended: false }));
-app.use(cookieParser());
-app.use(methodOverride('_method'));
+    if (!users) {
+      return res.render('akunUser/akunUser', { users: [], msg: '' });
+    }
+    res.render('akunUser/akunUser', { users, msg: '', loginUser: req.user });
+  } catch (err) {
+    console.error(err.message);
+  }
+});
 
-//Public Static Folder
-app.use('/plugins', express.static(path.join(__dirname, 'plugins')));
-app.use('/dist', express.static(path.join(__dirname, 'dist')));
-app.use('/public', express.static(path.join(__dirname, 'public')));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+//@route GET akun-user/tambah-user
+//@desc Show tambah user page
+//@access Private
 
-//Define routes
-app.use('/', require('./routes/index'));
-app.use('/akun-user', require('./routes/user'));
-app.use('/auth', require('./routes/auth'));
-app.use('/profile', require('./routes/profile'));
-app.use('/divisi', require('./routes/divisi'));
-app.use('/index', require('./routes/Magang'));
-app.use('/kontrak', require('./routes/kontrak'));
-app.use('/karyawancuti',require('./routes/Karyawancuti'));
-app.use('/karyawan', require('./routes/karyawan'));
+router.get('/tambah-user', auth, (req, res) => {
+  try {
+    if (req.user.role !== 'GM') {
+      return res.redirect('/akun-user');
+    }
 
-const PORT = process.env.PORT || '8080';
-app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
+    res.render('akunUser/tambahUser', {
+      loginUser: req.user,
+      username: '',
+      role: '',
+      password: '',
+      confirmPassword: '',
+      msg: [],
+    });
+  } catch (err) {
+    console.error(err.message);
+  }
+});
+
+//@route POST akun-user/tambah-user
+//@desc Register new user account
+//@access Private
+
+router.post('/tambah-user', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'GM') {
+      return res.redirect('/akun-user');
+    }
+    let { username, role, password, confirmPassword } = req.body;
+
+    username = username.toLowerCase();
+    const msg = [];
+
+    if (password === '') msg.push('Password tidak boleh kosong');
+    if (confirmPassword === '')
+      msg.push('Konfirmasi password tidak boleh kosong');
+    if (username === '') msg.push('Username tidak boleh kosong');
+    if (role === '') msg.push('Role tidak boleh kosong');
+
+    if (msg.length > 0) {
+      return res.render('akunUser/tambahUser', {
+        loginUser: req.user,
+        username,
+        role,
+        password,
+        confirmPassword,
+        msg,
+      });
+    }
+
+    if (password.length < 6) {
+      return res.render('akunUser/tambahUser', {
+        loginUser: req.user,
+        username,
+        role,
+        password,
+        confirmPassword,
+        msg: [...msg, 'Password minimal 6 karakter atau lebih'],
+      });
+    }
+
+    if (password !== confirmPassword) {
+      return res.render('akunUser/tambahUser', {
+        loginUser: req.user,
+        username,
+        role,
+        password,
+        confirmPassword,
+        msg: [...msg, 'Password tidak cocok'],
+      });
+    }
+
+    let user = await User.findOne({ username });
+    if (user) {
+      return res.render('akunUser/tambahUser', {
+        loginUser: req.user,
+        username,
+        role,
+        password,
+        confirmPassword,
+        msg: [...msg, 'Akun dengan username ini sudah terdaftar'],
+      });
+    }
+
+    user = new User({
+      username,
+      role,
+      password,
+    });
+
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(password, salt);
+
+    await user.save();
+    res.redirect('/akun-user');
+  } catch (err) {
+    console.error(err.message);
+  }
+});
+
+//@route GET akun-user/:username
+//@desc Show Edit user page
+//@access Private
+
+router.get('/:username', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'GM') {
+      return res.redirect('/akun-user');
+    }
+
+    const user = await User.findOne({ username: req.params.username });
+
+    if (!user) {
+      return res.redirect('/akun-user');
+    }
+
+    const { username, role } = user;
+
+    res.render('akunUser/editUser', {
+      loginUser: req.user,
+      username,
+      role,
+      password: '',
+      confirmPassword: '',
+      msg: [],
+    });
+  } catch (err) {
+    console.error(err.message);
+  }
+});
+
+//@route PUT akun-user/:username
+//@desc Edit user
+//@access Private
+
+router.put('/:username', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'GM') {
+      return res.redirect('/akun-user');
+    }
+
+    let { username, role, password, confirmPassword } = req.body;
+
+    username = username.toLowerCase();
+    const msg = [];
+
+    if (password === '') msg.push('Password tidak boleh kosong');
+    if (confirmPassword === '')
+      msg.push('Konfirmasi password tidak boleh kosong');
+    if (username === '') msg.push('Username tidak boleh kosong');
+    if (role === '') msg.push('Role tidak boleh kosong');
+
+    if (msg.length > 0) {
+      return res.render('akunUser/editUser', {
+        loginUser: req.user,
+        username,
+        role,
+        password,
+        confirmPassword,
+        msg,
+      });
+    }
+
+    if (password.length < 6) {
+      return res.render('akunUser/editUser', {
+        loginUser: req.user,
+        username,
+        role,
+        password,
+        confirmPassword,
+        msg: [...msg, 'Password minimal 6 karakter atau lebih'],
+      });
+    }
+
+    if (password !== confirmPassword) {
+      return res.render('akunUser/editUser', {
+        loginUser: req.user,
+        username,
+        role,
+        password,
+        confirmPassword,
+        msg: [...msg, 'Password tidak cocok'],
+      });
+    }
+
+    let newUser = await User.findOne({ username });
+
+    if (newUser && username !== req.params.username) {
+      return res.render('akunUser/editUser', {
+        loginUser: req.user,
+        username,
+        role,
+        password,
+        confirmPassword,
+        msg: [...msg, 'Akun dengan username ini sudah terdaftar'],
+      });
+    }
+
+    const user = await User.findOne({ username: req.params.username });
+
+    user.username = username;
+    user.role = role;
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(password, salt);
+
+    await user.save();
+    res.redirect('/akun-user');
+  } catch (err) {
+    console.error(err.message);
+  }
+});
+
+//@route DELETE akun-user/:username
+//@desc DELETE user
+//@access Private
+
+router.delete('/:id', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'GM') {
+      return res.redirect('/akun-user');
+    }
+
+    const user = await User.findById(req.params.id);
+
+    if (!user) {
+      return res.redirect('/akun-user');
+    }
+
+    await User.findByIdAndRemove(req.params.id);
+
+    res.redirect('/akun-user');
+  } catch (err) {
+    console.error(err.message);
+  }
+});
+
+module.exports = router;

@@ -1,9 +1,22 @@
 var express = require('express');
 var router = express.Router();
 
+const User = require('../models/user')
+
 /* GET home page. */
-router.get('/', function(req, res, next) {
-  res.render('index', { title: 'Express' });
+router.get('/', async (req, res, next) => {
+  try {
+    const users = await User.find()
+      .select('username role')
+      .sort({ date: 'desc' });
+
+    if (!users) {
+      return res.render('akunUser/akunUser', { users: [], msg: '' });
+    }
+    res.render('akunUser/akunUser', { users, msg: '', loginUser: req.user });
+  } catch (err) {
+    console.error(err.message)
+  }
 });
 
 module.exports = router;
